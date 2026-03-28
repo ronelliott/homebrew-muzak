@@ -1,6 +1,6 @@
 # homebrew-muzak
 
-Homebrew tap for [muzak](https://github.com/ronelliott/muzak), a minimalist terminal-based music player for macOS.
+Homebrew tap for [muzak](https://github.com/ronelliott/muzak), a minimalist terminal-based music player.
 
 ## Install
 

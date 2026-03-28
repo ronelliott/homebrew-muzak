@@ -1,5 +1,5 @@
 class Muzak < Formula
-  desc "Minimalist terminal-based music player for macOS"
+  desc "Minimalist terminal-based music player"
   homepage "https://github.com/ronelliott/muzak"
   version "0.1.3"
   license "MIT"
@@ -13,8 +13,6 @@ class Muzak < Formula
     url "https://github.com/ronelliott/muzak/releases/download/v0.1.3/muzak-darwin-amd64"
     sha256 "dc4f4a67f3605bfd1d61f1eb4c9fc8a1eb2f74bf0c0caf5678fdbe955a1247d2"
   end
-
-  depends_on :macos
 
   def install
     binary = Hardware::CPU.arm? ? "muzak-darwin-arm64" : "muzak-darwin-amd64"
