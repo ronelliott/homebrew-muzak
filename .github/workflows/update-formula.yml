@@ -1,0 +1,118 @@
+name: Update Formula
+
+on:
+  repository_dispatch:
+    types: [muzak-release]
+
+concurrency:
+  group: update-formula
+  cancel-in-progress: false
+
+jobs:
+
+  update-formula:
+    name: Update muzak formula
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate and normalize tag
+        env:
+          TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          if ! [[ "${TAG}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: tag '${TAG}' does not match required format [v]<major>.<minor>.<patch>"
+            exit 1
+          fi
+          VERSION="v${TAG#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Download tarballs
+        run: |
+          for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
+            curl --retry 5 --retry-delay 5 -fsSL \
+              "https://github.com/ronelliott/muzak/releases/download/${VERSION}/muzak-${target}.tar.gz" \
+              -o "muzak-${target}.tar.gz"
+          done
+
+      - name: Compute SHA256s
+        id: sha
+        run: |
+          echo "darwin_arm64=$(sha256sum muzak-darwin-arm64.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "darwin_amd64=$(sha256sum muzak-darwin-amd64.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "linux_amd64=$(sha256sum muzak-linux-amd64.tar.gz | awk '{print $1}')"   >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(sha256sum muzak-linux-arm64.tar.gz | awk '{print $1}')"   >> "$GITHUB_OUTPUT"
+
+      - name: Write formula
+        env:
+          SHA_DARWIN_ARM64: ${{ steps.sha.outputs.darwin_arm64 }}
+          SHA_DARWIN_AMD64: ${{ steps.sha.outputs.darwin_amd64 }}
+          SHA_LINUX_AMD64: ${{ steps.sha.outputs.linux_amd64 }}
+          SHA_LINUX_ARM64: ${{ steps.sha.outputs.linux_arm64 }}
+        run: |
+          VERSION_NUM="${VERSION#v}"
+          cat > Formula/muzak.rb <<EOF
+          class Muzak < Formula
+            desc "Minimalist terminal-based music player"
+            homepage "https://github.com/ronelliott/muzak"
+            version "${VERSION_NUM}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/ronelliott/muzak/releases/download/${VERSION}/muzak-darwin-arm64.tar.gz"
+                sha256 "${SHA_DARWIN_ARM64}"
+              end
+
+              on_intel do
+                url "https://github.com/ronelliott/muzak/releases/download/${VERSION}/muzak-darwin-amd64.tar.gz"
+                sha256 "${SHA_DARWIN_AMD64}"
+              end
+            end
+
+            on_linux do
+              depends_on "alsa-lib"
+
+              on_intel do
+                url "https://github.com/ronelliott/muzak/releases/download/${VERSION}/muzak-linux-amd64.tar.gz"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+
+              on_arm do
+                url "https://github.com/ronelliott/muzak/releases/download/${VERSION}/muzak-linux-arm64.tar.gz"
+                sha256 "${SHA_LINUX_ARM64}"
+              end
+            end
+
+            def install
+              bin.install "muzak"
+              chmod 0555, bin/"muzak"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/muzak --version")
+            end
+          end
+          EOF
+
+      - name: Commit, tag, and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/muzak.rb
+          git diff --staged --quiet || git commit -m "chore: update muzak to ${VERSION}"
+          # Create tag only if it doesn't already exist locally
+          if ! git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            git tag "${VERSION}"
+          else
+            echo "Tag ${VERSION} already exists locally; skipping tag creation."
+          fi
+          git push
+          # Push tag only if it doesn't already exist on remote
+          if ! git ls-remote --exit-code --tags origin "${VERSION}" >/dev/null 2>&1; then
+            git push origin "${VERSION}"
+          else
+            echo "Tag ${VERSION} already exists on remote; skipping tag push."
+          fi
