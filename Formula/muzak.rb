@@ -19,6 +19,7 @@ class Muzak < Formula
   def install
     binary = Hardware::CPU.arm? ? "muzak-darwin-arm64" : "muzak-darwin-amd64"
     bin.install binary => "muzak"
+    chmod 0555, bin/"muzak"
   end
 
   test do
