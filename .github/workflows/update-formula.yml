@@ -17,22 +17,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate tag
+      - name: Validate and normalize tag
         env:
           TAG: ${{ github.event.client_payload.tag }}
         run: |
-          if ! [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: tag '${TAG}' does not match required format v<major>.<minor>.<patch>"
+          if ! [[ "${TAG}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: tag '${TAG}' does not match required format [v]<major>.<minor>.<patch>"
             exit 1
           fi
+          VERSION="v${TAG#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Download tarballs
-        env:
-          TAG: ${{ github.event.client_payload.tag }}
         run: |
           for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
             curl --retry 5 --retry-delay 5 -fsSL \
-              "https://github.com/ronelliott/muzak/releases/download/${TAG}/muzak-${target}.tar.gz" \
+              "https://github.com/ronelliott/muzak/releases/download/${VERSION}/muzak-${target}.tar.gz" \
               -o "muzak-${target}.tar.gz"
           done
 
@@ -46,7 +46,6 @@ jobs:
 
       - name: Write formula
         env:
-          VERSION: ${{ github.event.client_payload.tag }}
           SHA_DARWIN_ARM64: ${{ steps.sha.outputs.darwin_arm64 }}
           SHA_DARWIN_AMD64: ${{ steps.sha.outputs.darwin_amd64 }}
           SHA_LINUX_AMD64: ${{ steps.sha.outputs.linux_amd64 }}
@@ -98,8 +97,6 @@ jobs:
           EOF
 
       - name: Commit, tag, and push
-        env:
-          VERSION: ${{ github.event.client_payload.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
