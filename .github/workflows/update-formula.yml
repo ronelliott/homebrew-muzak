@@ -4,6 +4,10 @@ on:
   repository_dispatch:
     types: [muzak-release]
 
+concurrency:
+  group: update-formula
+  cancel-in-progress: false
+
 jobs:
 
   update-formula:
